@@ -141,8 +141,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 // ── Mobile: camera further back so sphere fits; narrow portrait: extra margin ───
 const aspect = window.innerWidth / window.innerHeight;
 const narrowPortrait = isMobile && aspect < 0.7;
-const CAM_Z_START = narrowPortrait ? 4.2 : (isMobile ? 3.85 : 3.4);
-const CAM_Z_END = narrowPortrait ? 1.15 : (isMobile ? 1.02 : 0.82);
+const CAM_Z_START = narrowPortrait ? 4.5 : (isMobile ? 4.15 : 3.4);
+const CAM_Z_END = narrowPortrait ? 1.25 : (isMobile ? 1.12 : 0.82);
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 100);
@@ -224,7 +224,7 @@ function trySphereClick(){
 function resetCameraZoom(){
   const a = window.innerWidth / window.innerHeight;
   const np = isMobile && a < 0.7;
-  camera.position.z = np ? 4.2 : (isMobile ? 3.85 : 3.4);
+  camera.position.z = np ? 4.5 : (isMobile ? 4.15 : 3.4);
 }
 sCanvas.addEventListener('click', trySphereClick);
 sCanvas.addEventListener('touchstart', e=>{
@@ -293,7 +293,7 @@ window.addEventListener('resize',()=>{
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
-  if(zoomPhase === 'idle') camera.position.z = (isMobile && camera.aspect < 0.7) ? 4.2 : (isMobile ? 3.85 : 3.4);
+  if(zoomPhase === 'idle') camera.position.z = (isMobile && camera.aspect < 0.7) ? 4.5 : (isMobile ? 4.15 : 3.4);
 });
 
 // ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
@@ -304,6 +304,7 @@ const soundBtn = document.getElementById('sound-btn');
 function startAudio(){
   if(typeof Tone==='undefined') return;
   Tone.start();
+  const now = Tone.now();
 
   // ── master chain ──────────────────────────────────────────────────────
   masterOut = new Tone.Gain(1).toDestination();
@@ -372,14 +373,13 @@ function startAudio(){
     volume:-19
   }).connect(pingVib);
 
-  // ── 5. ACTIVATION SWEEP — cinematic rise ─────────────────────────────
+    // ── 5. ACTIVATION SWEEP — cinematic rise ─────────────────────────────
   const sweepRev = new Tone.Reverb({decay:8, wet:.85}).connect(masterEQ);
   const sweep = new Tone.FMSynth({
     harmonicity:3, modulationIndex:1.2,
     envelope:{attack:.15, decay:2.5, sustain:0, release:3},
     volume:-10
   }).connect(sweepRev);
-  const now = Tone.now();
   sweep.frequency.setValueAtTime(82, now);
   sweep.frequency.exponentialRampToValueAtTime(1047, now + 2.2);
   sweep.triggerAttack(82, now);
@@ -479,7 +479,8 @@ soundBtn.addEventListener('click',()=>{
   if(!audioStarted){ startAudio(); audioStarted=true; return; }
   soundOn=!soundOn;
   soundBtn.textContent=soundOn?'[ sound on ]':'[ sound off ]';
-  Tone.getDestination().volume.rampTo(soundOn?0:-80, .6);
+  if(masterOut) masterOut.gain.rampTo(soundOn?1:0, .5);
+  else Tone.getDestination().volume.rampTo(soundOn?0:-80, .5);
 });
 </script>
 </body>
