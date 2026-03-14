@@ -8,8 +8,8 @@ import { createNoise3D } from 'simplex-noise';
 const N = 1200;
 const SPHERE_RADIUS = 1.0;
 const GLOW_RADIUS = 0.45;
-const BASE_OPACITY = 0.12;
-const PULSE_AMPLITUDE = 0.06;
+const BASE_OPACITY = 0.055;
+const PULSE_AMPLITUDE = 0.025;
 const PULSE_FREQ = 0.8;
 const NOISE_AMOUNT = 0.015;
 const HIT_LERP = 0.15;
@@ -65,7 +65,7 @@ export function createDotSphereScene(container, options = {}) {
   const colors = new Float32Array(N * 3);
 
   for (let i = 0; i < N; i++) {
-    sizes[i] = 3;
+    sizes[i] = 2.35;
     opacities[i] = BASE_OPACITY;
     colors[i * 3] = 1;
     colors[i * 3 + 1] = 1;
@@ -104,7 +104,7 @@ export function createDotSphereScene(container, options = {}) {
         vec2 center = gl_PointCoord - vec2(0.5);
         float dist = length(center);
         if (dist > 0.5) discard;
-        float alpha = (1.0 - smoothstep(0.2, 0.5, dist)) * vOpacity;
+        float alpha = (1.0 - smoothstep(0.36, 0.5, dist)) * vOpacity;
         gl_FragColor = vec4(vColor, alpha);
       }
     `,
@@ -211,7 +211,7 @@ export function createDotSphereScene(container, options = {}) {
 
       const pulse = Math.sin(time * PULSE_FREQ + i * 0.05) * PULSE_AMPLITUDE;
       let opacity = BASE_OPACITY + pulse;
-      let size = 3;
+      let size = 2.35;
       WHITE.getRGB(tempColor);
 
       const dist = Math.sqrt(
@@ -226,16 +226,16 @@ export function createDotSphereScene(container, options = {}) {
         if (brightness > 0.8) {
           const u = (brightness - 0.8) / 0.2;
           lerpColor(tempColor, TEAL, WHITE, u);
-          size = 6;
+          size = 4.8;
         } else if (brightness > 0.3) {
           tempColor.copy(TEAL);
-          size = 4 + brightness * 2;
+          size = 3.2 + brightness * 1.4;
         } else {
           lerpColor(tempColor, WHITE, TEAL, brightness / 0.3);
-          size = 3;
+          size = 2.35;
         }
       } else {
-        size = 3;
+        size = 2.35;
       }
 
       if (rippleTime >= 0 && rippleTime < RIPPLE_DURATION) {

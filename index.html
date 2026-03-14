@@ -11,85 +11,17 @@
 </head>
 <body>
   <div id="tap-to-enter" class="tap-to-enter" aria-live="polite">
-    <span class="tap-to-enter-text">tap to enter</span>
+    <h1 class="enter-title">Aetheric Lab</h1>
+    <p class="tap-to-enter-text">tap to enter</p>
   </div>
 
   <div id="noise-overlay" aria-hidden="true"></div>
   <div id="sphere-canvas-wrap" class="sphere-canvas-wrap" aria-hidden="true"></div>
 
-  <button id="mute-btn" class="mute-btn" type="button" aria-label="Toggle sound" title="Toggle sound (M)">
-    <svg class="mute-btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path class="mute-waveform" d="M4 12v-2h2v2H4zm4 0V8h2v4H8zm4 0v-4h2v4h-2zm4 0V6h2v6h-2z"/>
-    </svg>
-  </button>
-
-  <div id="cursor" class="cursor" aria-hidden="true">
-    <span class="cursor-dot"></span>
-    <span class="cursor-ring"></span>
-  </div>
-
-  <main>
-    <section id="hero" class="hero full-viewport">
-      <div id="hero-canvas-wrap" class="hero-canvas-wrap"></div>
-      <p class="hero-tagline" aria-hidden="true">We build things that shouldn't exist yet.</p>
-      <div class="hero-scroll-hint" aria-hidden="true">
-        <span class="hero-arrow"></span>
-      </div>
-    </section>
-
-    <section id="sphere-section" class="sphere-section full-viewport">
-      <div class="sphere-content">
-        <p class="manifesto" id="manifesto">
-          <span class="word">A</span> <span class="word">lab</span> <span class="word">at</span> <span class="word">the</span> <span class="word">edge</span>
-          <span class="word">/</span>
-          <span class="word">of</span> <span class="word">what's</span> <span class="word">technically</span>
-          <span class="word">/</span>
-          <span class="word">possible.</span>
-        </p>
-      </div>
-    </section>
-
-    <section id="services" class="services full-viewport">
-      <h2 class="section-label">Services</h2>
-      <div class="services-grid">
-        <article class="service-card" data-cursor-hover>
-          <span class="service-icon" aria-hidden="true">⟡</span>
-          <h3 class="service-name">Research</h3>
-          <p class="service-desc">Experimental systems and feasibility studies at the edge of known tech.</p>
-        </article>
-        <article class="service-card" data-cursor-hover>
-          <span class="service-icon" aria-hidden="true">◇</span>
-          <h3 class="service-name">Prototyping</h3>
-          <p class="service-desc">Rapid iteration from concept to working proof-of-concept.</p>
-        </article>
-        <article class="service-card" data-cursor-hover>
-          <span class="service-icon" aria-hidden="true">◈</span>
-          <h3 class="service-name">Integration</h3>
-          <p class="service-desc">Bridging cutting-edge tech with production-ready systems.</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="contact" class="contact full-viewport">
-      <span class="contact-watermark" aria-hidden="true">CONTACT</span>
-      <a href="mailto:hello@aethericlab.com" class="contact-email" data-cursor-hover>hello@aethericlab.com</a>
-      <div class="contact-links">
-        <a href="#" class="contact-link" data-cursor-hover aria-label="Twitter">𝕏</a>
-        <a href="#" class="contact-link" data-cursor-hover aria-label="LinkedIn">in</a>
-        <a href="#" class="contact-link" data-cursor-hover aria-label="GitHub">⌘</a>
-      </div>
-    </section>
-  </main>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
   <script type="importmap">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
-      "lenis": "https://cdn.jsdelivr.net/npm/lenis@1.3.18/dist/lenis.mjs",
       "simplex-noise": "https://cdn.jsdelivr.net/npm/simplex-noise@4.0.3/dist/esm/simplex-noise.js"
     }
   }
