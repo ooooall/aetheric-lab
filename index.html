@@ -24,9 +24,9 @@ html,body{width:100%;height:100%;background:#060606;overflow:hidden;cursor:none}
   position:fixed;inset:0;z-index:8000;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;
   background:#060606;
-  transition:opacity 1s ease,visibility 1s ease
+  transition:opacity 1.2s cubic-bezier(.25,.1,.25,1), visibility 1.2s, transform 1.2s cubic-bezier(.25,.1,.25,1)
 }
-#enter-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+#enter-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none;transform:scale(0.88)}
 #enter-overlay h1{font-family:'DM Serif Display',serif;font-size:clamp(2rem,6vw,4.5rem);color:#e8e8e8;font-weight:400;letter-spacing:.04em}
 #enter-overlay p{font-family:'JetBrains Mono',monospace;font-size:.7rem;letter-spacing:.3em;color:#555;text-transform:uppercase;animation:blink 2s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:.35}50%{opacity:1}}
@@ -92,11 +92,13 @@ document.querySelectorAll('button,a').forEach(el=>{
 let audioStarted = false;
 const overlay = document.getElementById('enter-overlay');
 overlay.addEventListener('click', ()=>{
+  if(overlay.classList.contains('hidden')) return;
   overlay.classList.add('hidden');
   startAudio();
   audioStarted = true;
   setTimeout(()=>{ document.getElementById('tagline').classList.add('visible'); }, 800);
-}, {once:true});
+  if(typeof resetCameraZoom === 'function') resetCameraZoom();
+});
 
 // ─── THREE.JS SPHERE ──────────────────────────────────────────────────────────
 const sCanvas = document.getElementById('sphere-canvas');
@@ -150,14 +152,12 @@ const raycaster = new THREE.Raycaster();
 const mouse2D = new THREE.Vector2();
 let sMouseX=0, sMouseY=0, sphereHover=false;
 
-// Explode/reassemble state
-let explodePhase = 'idle';  // idle | exploding | reassembling
-let explodeStartTime = 0;
-let reassembleStartTime = 0;
-let clickHitWorld = new THREE.Vector3();
-let scatterFactor = 0;
-const EXPLODE_DUR = .55;
-const REASSEMBLE_DUR = 1.1;
+// Camera zoom + overlay reveal state
+let zoomPhase = 'idle';  // idle | zooming
+let zoomStartTime = 0;
+const CAM_Z_START = 3.4;
+const CAM_Z_END = 0.82;
+const ZOOM_DUR = 1.1;
 
 sCanvas.addEventListener('mousemove', e=>{
   const r = sCanvas.getBoundingClientRect();
@@ -168,16 +168,19 @@ sCanvas.addEventListener('mousemove', e=>{
 sCanvas.addEventListener('mouseleave', ()=>{ sphereHover=false; });
 
 function trySphereClick(){
-  if(explodePhase !== 'idle') return;
+  if(zoomPhase !== 'idle') return;
   mouse2D.set(sMouseX, sMouseY);
   raycaster.setFromCamera(mouse2D, camera);
   const hits = raycaster.intersectObject(hitSphere);
   if(hits.length === 0) return;
 
-  clickHitWorld.copy(hits[0].point);
-  explodePhase = 'exploding';
-  explodeStartTime = clock.getElapsedTime();
+  zoomPhase = 'zooming';
+  zoomStartTime = clock.getElapsedTime();
   if(audioStarted) playExplodeSound();
+}
+
+function resetCameraZoom(){
+  camera.position.z = CAM_Z_START;
 }
 sCanvas.addEventListener('click', trySphereClick);
 sCanvas.addEventListener('touchstart', e=>{
@@ -195,43 +198,22 @@ const clock = new THREE.Clock();
   requestAnimationFrame(loopSphere);
   const t = clock.getElapsedTime();
 
-  sphereGroup.rotation.y += (sphereHover && explodePhase === 'idle') ? .007 : .003;
+  sphereGroup.rotation.y += (sphereHover && zoomPhase === 'idle') ? .007 : .003;
   sphereGroup.rotation.x += .0005;
 
-  // ── Explode / Reassemble animation ───────────────────────────────────────────
-  if(explodePhase === 'exploding'){
-    const elapsed = t - explodeStartTime;
-    const p = Math.min(1, elapsed / EXPLODE_DUR);
-    scatterFactor = p * p * 2.8;  // ease-in: dots fly outward
-    dots.forEach((d,i)=>{
-      const dir = dotPositions[i].clone().normalize();
-      d.position.copy(dotPositions[i]).add(dir.multiplyScalar(scatterFactor));
-      dotMats[i].opacity = Math.max(.05, .2 - p*.15);
-      dotMats[i].color.set(0x4de8c2);
-    });
-    if(p >= 1){
-      explodePhase = 'reassembling';
-      reassembleStartTime = t;
-      if(audioStarted) playReassembleSound();
+  // ── Camera zoom in → overlay reveal (same animation feel) ─────────────────────
+  if(zoomPhase === 'zooming'){
+    const elapsed = t - zoomStartTime;
+    const p = Math.min(1, elapsed / ZOOM_DUR);
+    const easeIn = p * p;  // ease-in: approach feel
+    camera.position.z = CAM_Z_START + (CAM_Z_END - CAM_Z_START) * easeIn;
+    if(p >= .5 && overlay.classList.contains('hidden')){
+      document.getElementById('tagline').classList.remove('visible');
+      overlay.classList.remove('hidden');
     }
-  } else if(explodePhase === 'reassembling'){
-    const elapsed = t - reassembleStartTime;
-    const p = Math.min(1, elapsed / REASSEMBLE_DUR);
-    const easeOut = 1 - Math.pow(1 - p, 1.8);  // ease-out
-    sphereGroup.position.lerp(clickHitWorld, .12);
-    dots.forEach((d,i)=>{
-      const dir = dotPositions[i].clone().normalize();
-      const scattered = dotPositions[i].clone().add(dir.multiplyScalar(2.8));
-      d.position.lerpVectors(scattered, dotPositions[i], easeOut);
-      dotMats[i].opacity = .08 + easeOut * .1;
-      dotMats[i].color.set(0xffffff);
-    });
     if(p >= 1){
-      explodePhase = 'idle';
-      scatterFactor = 0;
-      sphereGroup.position.copy(clickHitWorld);
-      dots.forEach((d,i)=>{ d.position.copy(dotPositions[i]); });
-      dotMats.forEach(m=>{ m.opacity = .13; m.color.set(0xffffff); });
+      zoomPhase = 'idle';
+      if(audioStarted) playReassembleSound();
     }
   } else if(sphereHover){
     raycaster.setFromCamera({x:sMouseX, y:sMouseY}, camera);
