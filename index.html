@@ -111,9 +111,9 @@ const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHei
 camera.position.z = 3.4;
 
 // ── Fibonacci dots ────────────────────────────────────────────────────────────
-const N_DOTS = 600;
+const N_DOTS = 2800;
 const golden = Math.PI*(3-Math.sqrt(5));
-const dotGeo = new THREE.SphereGeometry(.018, 7, 7);
+const dotGeo = new THREE.SphereGeometry(.0095, 6, 6);
 const dotMats   = [];
 const dots      = [];
 const dotPositions = [];   // local positions (unit sphere)
@@ -182,7 +182,7 @@ const clock = new THREE.Clock();
         else            dotMats[i].color.set(0xffffff);
       });
 
-      if(audioStarted && Math.random()<.06) playSphereNote(hp.y);
+      if(audioStarted) playSphereNote(hp.y);
     }
   } else {
     dotMats.forEach((m,i)=>{
@@ -203,62 +203,128 @@ window.addEventListener('resize',()=>{
 });
 
 // ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
-let drone, bowl, pingPoly;
 let soundOn = false;
+let masterOut, bowlSynth, dronePoly, shimmerLFO, cosmoPings, noiseLayer;
 const soundBtn = document.getElementById('sound-btn');
 
 function startAudio(){
   if(typeof Tone==='undefined') return;
   Tone.start();
 
-  const rev6 = new Tone.Reverb({decay:6,wet:.7}).toDestination();
-  const lim  = new Tone.Limiter(-6).connect(rev6);
+  // ── master chain ──────────────────────────────────────────────────────
+  masterOut = new Tone.Gain(1).toDestination();
+  const masterLimiter = new Tone.Limiter(-4).connect(masterOut);
+  const masterEQ = new Tone.EQ3({low:3,mid:0,high:-1}).connect(masterLimiter);
 
-  // ambient drone 36 Hz + fifth
-  drone = new Tone.PolySynth(Tone.Synth,{
+  // ── 1. DEEP SPACE DRONE — sub-bass breathing field ───────────────────
+  // Three layers: 29Hz + 43Hz (minor 3rd) + 58Hz (octave), all slightly detuned
+  const droneReverb = new Tone.Reverb({decay:18, wet:.92}).connect(masterEQ);
+  const droneFilter = new Tone.AutoFilter({
+    frequency:.06, type:'sine', depth:.55, baseFrequency:55, octaves:1.5
+  }).start().connect(droneReverb);
+
+  dronePoly = new Tone.PolySynth(Tone.Synth, {
     oscillator:{type:'sine'},
-    envelope:{attack:4,decay:0,sustain:1,release:8},
-    volume:-28
-  }).connect(new Tone.AutoFilter({frequency:.08,depth:.3}).start()).connect(rev6);
-  drone.triggerAttack(['C1','G1','C2']);
+    envelope:{attack:5,decay:0,sustain:1,release:10},
+    volume:-26
+  }).connect(droneFilter);
+  // Detune slightly each voice for organic beating
+  dronePoly.triggerAttack(['D1','A1','D2']);
+  // LFO shimmer on volume — makes it "breathe"
+  shimmerLFO = new Tone.LFO({frequency:.12, min:-32, max:-24}).start();
+  shimmerLFO.connect(dronePoly.volume);
 
-  // singing bowl for cursor
-  bowl = new Tone.Synth({
-    oscillator:{type:'triangle'},
-    envelope:{attack:.4,decay:0,sustain:1,release:1.5},
-    volume:-22
-  }).connect(new Tone.Chorus({frequency:1.5,delayTime:3.5,depth:.7}).start())
-    .connect(new Tone.Reverb({decay:5,wet:.8}).toDestination());
+  // ── 2. COSMIC TEXTURE — metallic shimmer layer ────────────────────────
+  const shimRev = new Tone.Reverb({decay:12, wet:.88}).connect(masterEQ);
+  const shimDist = new Tone.Distortion(.08).connect(shimRev);
+  const shimFilter = new Tone.Filter({type:'bandpass', frequency:1800, Q:4}).connect(shimDist);
+  noiseLayer = new Tone.Noise('pink').connect(shimFilter);
+  noiseLayer.volume.value = -42;
+  noiseLayer.start();
 
-  // dot pings
-  pingPoly = new Tone.PolySynth(Tone.Synth,{
+  // ── 3. SINGING BOWL — cursor glide pitch ─────────────────────────────
+  // FM synth gives it a metallic harmonic series (like a real bowl)
+  const bowlRev = new Tone.Reverb({decay:9, wet:.85}).connect(masterEQ);
+  const bowlChorus = new Tone.Chorus({frequency:1.1, delayTime:4, depth:.6}).start().connect(bowlRev);
+  bowlSynth = new Tone.FMSynth({
+    harmonicity: 5.1,
+    modulationIndex: 2.2,
     oscillator:{type:'sine'},
-    envelope:{attack:.001,decay:.15,sustain:0,release:.3},
-    volume:-32
-  }).connect(new Tone.Reverb({decay:2,wet:.6}).toDestination());
+    modulation:{type:'triangle'},
+    modulationEnvelope:{attack:.3,decay:.4,sustain:.8,release:2.5},
+    envelope:{attack:.5, decay:0, sustain:1, release:2.5},
+    volume: -20
+  }).connect(bowlChorus);
+
+  // ── 4. CRYSTAL PINGS — dot touch chimes ──────────────────────────────
+  // Bell-like FM pings with long tail
+  const pingRev = new Tone.Reverb({decay:7, wet:.8}).connect(masterEQ);
+  const pingDelay = new Tone.FeedbackDelay({delayTime:'16n', feedback:.22, wet:.18}).connect(pingRev);
+  cosmoPings = new Tone.PolySynth(Tone.FMSynth, {
+    harmonicity: 4.2,
+    modulationIndex: 1.8,
+    oscillator:{type:'sine'},
+    modulation:{type:'sine'},
+    modulationEnvelope:{attack:.001,decay:.18,sustain:0,release:.4},
+    envelope:{attack:.001,decay:.22,sustain:0,release:.7},
+    volume: -28
+  }).connect(pingDelay);
+
+  // ── 5. ACTIVATION SWEEP — plays when entering ─────────────────────────
+  const sweepRev = new Tone.Reverb({decay:10, wet:.9}).connect(masterEQ);
+  const sweep = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:.1, decay:3, sustain:0, release:4},
+    volume:-16
+  }).connect(sweepRev);
+  const now = Tone.now();
+  sweep.frequency.setValueAtTime(60, now);
+  sweep.frequency.exponentialRampToValueAtTime(880, now + 2.5);
+  sweep.triggerAttack(60, now);
 
   soundOn = true;
   soundBtn.textContent='[ sound on ]';
 }
 
-let lastBowlFreq=-1;
+// Pentagon scale in Hz — exotic, spacey intervals
+const cosmoScale = [55, 61.7, 73.4, 82.4, 98, 110, 130.8, 146.8, 164.8, 196, 220, 261.6, 293.7, 329.6, 392, 440, 523, 587];
+let lastBowlFreq = -1;
+let lastPingTime = 0;
+
 function playSphereNote(yPos){
-  if(!soundOn||!bowl) return;
-  const freq = 55*Math.pow(2,(yPos+1)*1.5);
-  if(Math.abs(freq-lastBowlFreq)>5){
-    bowl.frequency.rampTo(freq,.08);
-    try{ if(!bowl._started){bowl.triggerAttack(freq);bowl._started=true;} }catch(e){}
-    lastBowlFreq=freq;
+  if(!soundOn) return;
+  const now = Tone.now();
+
+  // Singing bowl glide
+  if(bowlSynth){
+    // Map y (-1..1) to cosmoScale range
+    const idx = Math.floor(((yPos+1)/2) * (cosmoScale.length-1));
+    const freq = cosmoScale[Math.max(0, Math.min(cosmoScale.length-1, idx))];
+    if(Math.abs(freq - lastBowlFreq) > 3){
+      if(!bowlSynth._started){
+        bowlSynth.triggerAttack(freq, now);
+        bowlSynth._started = true;
+      } else {
+        bowlSynth.frequency.rampTo(freq, .12);
+      }
+      lastBowlFreq = freq;
+    }
   }
-  const pf=[220,330,440,550,660,880];
-  try{ pingPoly.triggerAttackRelease(pf[Math.floor(Math.random()*pf.length)]+Math.random()*15,'16n'); }catch(e){}
+
+  // Crystal pings — throttled to max 8 per second
+  if(cosmoPings && now - lastPingTime > .125){
+    const idx = Math.floor(Math.random() * cosmoScale.length);
+    const f = cosmoScale[idx] * (Math.random() < .3 ? 2 : 1); // occasional octave jump
+    try{ cosmoPings.triggerAttackRelease(f, '8n', now); }catch(e){}
+    lastPingTime = now;
+  }
 }
 
 soundBtn.addEventListener('click',()=>{
   if(!audioStarted){ startAudio(); audioStarted=true; return; }
   soundOn=!soundOn;
   soundBtn.textContent=soundOn?'[ sound on ]':'[ sound off ]';
-  Tone.getDestination().volume.rampTo(soundOn?0:-80,.5);
+  Tone.getDestination().volume.rampTo(soundOn?0:-80, .6);
 });
 </script>
 </body>
