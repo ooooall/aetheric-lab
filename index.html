@@ -147,7 +147,17 @@ sphereGroup.add(hitSphere);
 
 // ── Interaction state ─────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
+const mouse2D = new THREE.Vector2();
 let sMouseX=0, sMouseY=0, sphereHover=false;
+
+// Explode/reassemble state
+let explodePhase = 'idle';  // idle | exploding | reassembling
+let explodeStartTime = 0;
+let reassembleStartTime = 0;
+let clickHitWorld = new THREE.Vector3();
+let scatterFactor = 0;
+const EXPLODE_DUR = .55;
+const REASSEMBLE_DUR = 1.1;
 
 sCanvas.addEventListener('mousemove', e=>{
   const r = sCanvas.getBoundingClientRect();
@@ -157,16 +167,73 @@ sCanvas.addEventListener('mousemove', e=>{
 });
 sCanvas.addEventListener('mouseleave', ()=>{ sphereHover=false; });
 
+function trySphereClick(){
+  if(explodePhase !== 'idle') return;
+  mouse2D.set(sMouseX, sMouseY);
+  raycaster.setFromCamera(mouse2D, camera);
+  const hits = raycaster.intersectObject(hitSphere);
+  if(hits.length === 0) return;
+
+  clickHitWorld.copy(hits[0].point);
+  explodePhase = 'exploding';
+  explodeStartTime = clock.getElapsedTime();
+  if(audioStarted) playExplodeSound();
+}
+sCanvas.addEventListener('click', trySphereClick);
+sCanvas.addEventListener('touchstart', e=>{
+  if(e.touches.length) {
+    const r = sCanvas.getBoundingClientRect();
+    sMouseX = ((e.touches[0].clientX-r.left)/r.width )*2-1;
+    sMouseY =-((e.touches[0].clientY-r.top) /r.height)*2+1;
+    trySphereClick();
+  }
+}, {passive:true});
+
 // ── Render loop ───────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 (function loopSphere(){
   requestAnimationFrame(loopSphere);
   const t = clock.getElapsedTime();
 
-  sphereGroup.rotation.y += sphereHover ? .007 : .003;
+  sphereGroup.rotation.y += (sphereHover && explodePhase === 'idle') ? .007 : .003;
   sphereGroup.rotation.x += .0005;
 
-  if(sphereHover){
+  // ── Explode / Reassemble animation ───────────────────────────────────────────
+  if(explodePhase === 'exploding'){
+    const elapsed = t - explodeStartTime;
+    const p = Math.min(1, elapsed / EXPLODE_DUR);
+    scatterFactor = p * p * 2.8;  // ease-in: dots fly outward
+    dots.forEach((d,i)=>{
+      const dir = dotPositions[i].clone().normalize();
+      d.position.copy(dotPositions[i]).add(dir.multiplyScalar(scatterFactor));
+      dotMats[i].opacity = Math.max(.05, .2 - p*.15);
+      dotMats[i].color.set(0x4de8c2);
+    });
+    if(p >= 1){
+      explodePhase = 'reassembling';
+      reassembleStartTime = t;
+      if(audioStarted) playReassembleSound();
+    }
+  } else if(explodePhase === 'reassembling'){
+    const elapsed = t - reassembleStartTime;
+    const p = Math.min(1, elapsed / REASSEMBLE_DUR);
+    const easeOut = 1 - Math.pow(1 - p, 1.8);  // ease-out
+    sphereGroup.position.lerp(clickHitWorld, .12);
+    dots.forEach((d,i)=>{
+      const dir = dotPositions[i].clone().normalize();
+      const scattered = dotPositions[i].clone().add(dir.multiplyScalar(2.8));
+      d.position.lerpVectors(scattered, dotPositions[i], easeOut);
+      dotMats[i].opacity = .08 + easeOut * .1;
+      dotMats[i].color.set(0xffffff);
+    });
+    if(p >= 1){
+      explodePhase = 'idle';
+      scatterFactor = 0;
+      sphereGroup.position.copy(clickHitWorld);
+      dots.forEach((d,i)=>{ d.position.copy(dotPositions[i]); });
+      dotMats.forEach(m=>{ m.opacity = .13; m.color.set(0xffffff); });
+    }
+  } else if(sphereHover){
     raycaster.setFromCamera({x:sMouseX, y:sMouseY}, camera);
     const hits = raycaster.intersectObject(hitSphere);
     if(hits.length>0){
@@ -204,7 +271,7 @@ window.addEventListener('resize',()=>{
 
 // ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
 let soundOn = false;
-let masterOut, bowlSynth, dronePoly, shimmerLFO, cosmoPings, noiseLayer;
+let masterOut, masterEQ, bowlSynth, dronePoly, shimmerLFO, cosmoPings, noiseLayer;
 const soundBtn = document.getElementById('sound-btn');
 
 function startAudio(){
@@ -214,7 +281,7 @@ function startAudio(){
   // ── master chain ──────────────────────────────────────────────────────
   masterOut = new Tone.Gain(1).toDestination();
   const masterLimiter = new Tone.Limiter(-4).connect(masterOut);
-  const masterEQ = new Tone.EQ3({low:3,mid:0,high:-1}).connect(masterLimiter);
+  masterEQ = new Tone.EQ3({low:3,mid:0,high:-1}).connect(masterLimiter);
 
   // ── 1. DEEP SPACE DRONE — sub-bass breathing field ───────────────────
   // Three layers: 29Hz + 43Hz (minor 3rd) + 58Hz (octave), all slightly detuned
@@ -290,6 +357,51 @@ function startAudio(){
 const cosmoScale = [55, 61.7, 73.4, 82.4, 98, 110, 130.8, 146.8, 164.8, 196, 220, 261.6, 293.7, 329.6, 392, 440, 523, 587];
 let lastBowlFreq = -1;
 let lastPingTime = 0;
+
+function playExplodeSound(){
+  if(!soundOn || typeof Tone==='undefined') return;
+  const dest = masterEQ || Tone.getDestination();
+  const now = Tone.now();
+  const rev = new Tone.Reverb({decay:2.5, wet:.9}).connect(dest);
+  const noise = new Tone.Noise('brown').connect(rev);
+  noise.volume.value = -18;
+  noise.start(now);
+  noise.stop(now + .35);
+  const filter = new Tone.Filter({type:'lowpass', frequency:400}).connect(rev);
+  const sweep = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:.001, decay:.4, sustain:0, release:.6},
+    volume:-14
+  }).connect(filter);
+  sweep.frequency.setValueAtTime(180, now);
+  sweep.frequency.exponentialRampToValueAtTime(35, now + .4);
+  sweep.triggerAttackRelease(180, .45, now);
+}
+
+function playReassembleSound(){
+  if(!soundOn || typeof Tone==='undefined') return;
+  const dest = masterEQ || Tone.getDestination();
+  const now = Tone.now();
+  const rev = new Tone.Reverb({decay:6, wet:.88}).connect(dest);
+  const fm = new Tone.FMSynth({
+    harmonicity:3, modulationIndex:1.5,
+    envelope:{attack:.3, decay:0, sustain:1, release:2},
+    volume:-22
+  }).connect(rev);
+  fm.frequency.setValueAtTime(110, now);
+  fm.frequency.exponentialRampToValueAtTime(440, now + 1);
+  fm.triggerAttack(110, now);
+  fm.triggerRelease(now + 1.2);
+  [.25, .5, .75, 1].forEach((delay,i)=>{
+    const ping = new Tone.FMSynth({
+      harmonicity:4, modulationIndex:1.2,
+      envelope:{attack:.001, decay:.15, sustain:0, release:.5},
+      volume:-26
+    }).connect(rev);
+    const f = 220 + i * 110;
+    ping.triggerAttackRelease(f, '8n', now + delay * .9);
+  });
+}
 
 function playSphereNote(yPos){
   if(!soundOn) return;
