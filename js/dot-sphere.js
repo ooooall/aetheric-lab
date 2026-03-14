@@ -41,8 +41,8 @@ function fibonacciSphere(samples, radius) {
 
 export function createDotSphereScene(container, options = {}) {
   const callbacks = options.callbacks || {};
-  let width = Math.max(500, container.clientWidth);
-  let height = Math.max(500, container.clientHeight);
+  let width = Math.max(500, window.innerWidth);
+  let height = Math.max(500, window.innerHeight);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(60, width / height, 0.01, 10);
@@ -124,31 +124,46 @@ export function createDotSphereScene(container, options = {}) {
   const currentHit = new THREE.Vector3(0, 0, 0);
   const targetHit = new THREE.Vector3(0, 0, 0);
   const tempLocal = new THREE.Vector3();
+  const rayDir = new THREE.Vector3();
   const noise3D = createNoise3D();
 
-  let isHovering = false;
+  let isHovering = true;
   let time = 0;
-  let glowStrength = 0;
+  let glowStrength = 1;
   let spinBoostUntil = 0;
   let rippleTime = -1;
   let rippleOrigin = new THREE.Vector3(0, 0, 0);
+  let prevHadHit = false;
 
   function projectMouse(clientX, clientY) {
-    const rect = container.getBoundingClientRect();
-    const w = rect.width || width;
-    const h = rect.height || height;
-    mouse.x = ((clientX - rect.left) / w) * 2 - 1;
-    mouse.y = -((clientY - rect.top) / h) * 2 + 1;
+    mouse.x = (clientX / width) * 2 - 1;
+    mouse.y = -(clientY / height) * 2 + 1;
   }
 
   function updateHitPoint() {
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObject(hitMesh);
-    if (intersects.length > 0) {
+    const hadHit = intersects.length > 0;
+    if (hadHit) {
       tempLocal.copy(intersects[0].point);
       sphereGroup.worldToLocal(tempLocal);
       targetHit.copy(tempLocal);
+      if (!prevHadHit) {
+        rippleTime = 0;
+        rippleOrigin.copy(currentHit);
+        if (callbacks.onHoverEnter) callbacks.onHoverEnter();
+      }
+    } else {
+      rayDir.copy(raycaster.ray.direction).normalize().multiplyScalar(SPHERE_RADIUS);
+      tempLocal.copy(rayDir);
+      sphereGroup.worldToLocal(tempLocal);
+      targetHit.copy(tempLocal);
+      if (prevHadHit) {
+        spinBoostUntil = performance.now() + SPIN_BOOST_DURATION_MS;
+        if (callbacks.onHoverLeave) callbacks.onHoverLeave();
+      }
     }
+    prevHadHit = hadHit;
     currentHit.lerp(targetHit, HIT_LERP);
   }
 
@@ -170,8 +185,8 @@ export function createDotSphereScene(container, options = {}) {
 
     sphereGroup.updateMatrixWorld(true);
 
+    updateHitPoint();
     if (isHovering) {
-      updateHitPoint();
       glowStrength = Math.min(1, glowStrength + dt * 2);
     } else {
       glowStrength = Math.max(0, glowStrength - dt * (1000 / FADEOUT_MS));
@@ -265,38 +280,25 @@ export function createDotSphereScene(container, options = {}) {
   rafId = requestAnimationFrame(loop);
 
   function onMouseMove(e) {
+    isHovering = true;
     projectMouse(e.clientX, e.clientY);
   }
 
-  function onMouseEnter() {
-    isHovering = true;
-    spinBoostUntil = 0;
-    updateHitPoint();
-    currentHit.copy(targetHit);
-    rippleTime = 0;
-    rippleOrigin.copy(currentHit);
-    if (callbacks.onHoverEnter) callbacks.onHoverEnter();
-  }
-
-  function onMouseLeave() {
-    isHovering = false;
-    spinBoostUntil = performance.now() + SPIN_BOOST_DURATION_MS;
-    if (callbacks.onHoverLeave) callbacks.onHoverLeave();
-  }
-
-  function onClick(e) {
-    if (callbacks.onClick) callbacks.onClick(e);
+  function onMouseLeave(e) {
+    if (!e.relatedTarget || !document.contains(e.relatedTarget)) {
+      isHovering = false;
+      spinBoostUntil = performance.now() + SPIN_BOOST_DURATION_MS;
+      if (callbacks.onHoverLeave) callbacks.onHoverLeave();
+    }
   }
 
   window.addEventListener('resize', onResize);
-  container.addEventListener('mousemove', onMouseMove);
-  container.addEventListener('mouseenter', onMouseEnter);
-  container.addEventListener('mouseleave', onMouseLeave);
-  container.addEventListener('click', onClick);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseout', onMouseLeave);
 
   function onResize() {
-    width = Math.max(500, container.clientWidth);
-    height = Math.max(500, container.clientHeight);
+    width = Math.max(500, window.innerWidth);
+    height = Math.max(500, window.innerHeight);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
@@ -306,16 +308,15 @@ export function createDotSphereScene(container, options = {}) {
     destroy() {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
-      container.removeEventListener('mousemove', onMouseMove);
-      container.removeEventListener('mouseenter', onMouseEnter);
-      container.removeEventListener('mouseleave', onMouseLeave);
-      container.removeEventListener('click', onClick);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseout', onMouseLeave);
       renderer.dispose();
       geometry.dispose();
       material.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     },
     setMouse(clientX, clientY) {
+      isHovering = true;
       projectMouse(clientX, clientY);
     },
     getMouseXNorm() {
