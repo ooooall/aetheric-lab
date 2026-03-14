@@ -34,14 +34,8 @@ if (tapOverlay) {
 
 // ─── Lenis smooth scroll ───────────────────────────────────────────────
 const lenis = new Lenis({ lerp: 0.08, smoothWheel: true });
-const progressEl = document.getElementById('scroll-progress');
-function updateProgress() {
-  const p = lenis.progress;
-  progressEl.style.height = `${p * 100}%`;
-}
-lenis.on('scroll', updateProgress);
 
-// ─── RAF: Lenis + update progress ───────────────────────────────────────
+// ─── RAF: Lenis ────────────────────────────────────────────────────────
 function raf(time) {
   lenis.raf(time);
   requestAnimationFrame(raf);

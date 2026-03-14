@@ -22,6 +22,11 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -45,19 +50,6 @@ body.using-touch {
   opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
-}
-
-/* ━━━ Scroll progress ━━━ */
-#scroll-progress {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 1px;
-  height: 0;
-  background: var(--teal);
-  z-index: 9998;
-  transform-origin: top;
-  transition: height 0.1s var(--ease);
 }
 
 /* ━━━ Tap to enter (sound unlock) ━━━ */
@@ -246,40 +238,46 @@ body.using-touch .cursor {
   50% { opacity: 1; transform: rotate(45deg) translateY(6px); }
 }
 
-/* ━━━ Sphere section (сердце сайта) ━━━ */
+/* ━━━ Sphere section: сфера по центру, без фона ━━━ */
 .sphere-section {
-  flex-wrap: wrap;
-  padding: 3rem 2rem 4rem;
-  gap: 2rem;
-  align-items: center;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0;
+  background: var(--bg);
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sphere-canvas-wrap {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 58%;
-  max-width: 720px;
+  inset: 0;
+  width: 100%;
   height: 100%;
   z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sphere-content {
   position: relative;
   z-index: 1;
-  margin-left: auto;
-  width: 38%;
-  min-width: 260px;
+  width: 100%;
+  max-width: 90vw;
+  padding: 2rem 1.5rem 3rem;
   display: flex;
   align-items: center;
+  justify-content: center;
+  margin-top: auto;
 }
 
 .manifesto {
   font-family: 'DM Serif Display', serif;
-  font-size: clamp(2rem, 4vw, 4rem);
+  font-size: clamp(1.5rem, 3.5vw, 3.5rem);
   font-weight: 300;
-  line-height: 1.2;
+  line-height: 1.25;
   color: var(--text);
+  text-align: center;
 }
 
 .manifesto .word {
@@ -296,22 +294,10 @@ body.using-touch .cursor {
 
 @media (max-width: 768px) {
   .sphere-section {
-    flex-direction: column;
-    justify-content: center;
-    padding: 2rem 1rem 3rem;
-  }
-  .sphere-canvas-wrap {
-    position: relative;
-    width: 100%;
-    height: 65vh;
-    min-height: 320px;
-    max-width: none;
+    padding: 0;
   }
   .sphere-content {
-    width: 100%;
-    margin-left: 0;
-    justify-content: center;
-    text-align: center;
+    padding: 1.5rem 1rem 2.5rem;
   }
 }
 
