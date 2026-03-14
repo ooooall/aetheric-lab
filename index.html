@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#060606"/>
 <title>Aetheric Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;background:#060606;overflow:hidden;cursor:none}
+html{height:100%}
+body{width:100%;height:100%;min-height:100vh;min-height:-webkit-fill-available;background:#060606;overflow:hidden;cursor:none;-webkit-tap-highlight-color:transparent}
 
 /* noise grain */
 .noise{position:fixed;inset:0;pointer-events:none;z-index:999;opacity:.04;
@@ -24,7 +26,8 @@ html,body{width:100%;height:100%;background:#060606;overflow:hidden;cursor:none}
   position:fixed;inset:0;z-index:8000;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;
   background:#060606;
-  transition:opacity 1.2s cubic-bezier(.25,.1,.25,1), visibility 1.2s, transform 1.2s cubic-bezier(.25,.1,.25,1)
+  transition:opacity 1.2s cubic-bezier(.25,.1,.25,1), visibility 1.2s, transform 1.2s cubic-bezier(.25,.1,.25,1);
+  touch-action:manipulation
 }
 #enter-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none;transform:scale(0.88)}
 #enter-overlay h1{font-family:'DM Serif Display',serif;font-size:clamp(2rem,6vw,4.5rem);color:#e8e8e8;font-weight:400;letter-spacing:.04em}
@@ -40,7 +43,7 @@ html,body{width:100%;height:100%;background:#060606;overflow:hidden;cursor:none}
   background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
   color:#555;font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:.15em;
   padding:.45rem .8rem;cursor:none;text-transform:uppercase;
-  transition:border-color .3s,color .3s
+  transition:border-color .3s,color .3s;touch-action:manipulation
 }
 #sound-btn:hover{border-color:#4de8c2;color:#4de8c2}
 
@@ -52,6 +55,30 @@ html,body{width:100%;height:100%;background:#060606;overflow:hidden;cursor:none}
   opacity:0;transition:opacity 2s ease;pointer-events:none;z-index:7000;white-space:nowrap
 }
 #tagline.visible{opacity:1}
+
+/* ─── MOBILE ───────────────────────────────────────────────────────────────── */
+@media (max-width:768px),(hover:none){
+  html,body{cursor:default}
+  #cursor-dot,#cursor-ring{display:none!important}
+  #enter-overlay{gap:1.2rem;padding:1rem}
+  #enter-overlay h1{font-size:clamp(1.75rem,8vw,3rem)}
+  #enter-overlay p{font-size:.65rem;letter-spacing:.25em}
+  #sound-btn{
+    bottom:max(1rem,env(safe-area-inset-bottom));
+    right:max(1rem,env(safe-area-inset-right));
+    padding:.6rem 1rem;min-height:44px;min-width:44px;
+    font-size:.6rem;cursor:pointer
+  }
+  #tagline{
+    bottom:max(1.5rem,calc(1rem + env(safe-area-inset-bottom)));
+    font-size:.58rem;letter-spacing:.18em;
+    white-space:normal;text-align:center;max-width:90%;padding:0 1rem
+  }
+}
+@media (max-width:480px){
+  #enter-overlay h1{font-size:1.6rem}
+  #tagline{font-size:.52rem}
+}
 </style>
 </head>
 <body>
@@ -103,7 +130,7 @@ overlay.addEventListener('click', ()=>{
 // ─── THREE.JS SPHERE ──────────────────────────────────────────────────────────
 const sCanvas = document.getElementById('sphere-canvas');
 const renderer = new THREE.WebGLRenderer({canvas:sCanvas, antialias:true, alpha:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio,1.5) : Math.min(window.devicePixelRatio,2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene  = new THREE.Scene();
@@ -113,7 +140,8 @@ const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHei
 camera.position.z = 3.4;
 
 // ── Fibonacci dots ────────────────────────────────────────────────────────────
-const N_DOTS = 2800;
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+const N_DOTS = isMobile ? 1400 : 2800;
 const golden = Math.PI*(3-Math.sqrt(5));
 const dotGeo = new THREE.SphereGeometry(.0095, 6, 6);
 const dotMats   = [];
@@ -159,13 +187,21 @@ const CAM_Z_START = 3.4;
 const CAM_Z_END = 0.82;
 const ZOOM_DUR = 1.1;
 
-sCanvas.addEventListener('mousemove', e=>{
+function updateMouseFromEvent(e){
   const r = sCanvas.getBoundingClientRect();
-  sMouseX = ((e.clientX-r.left)/r.width )*2-1;
-  sMouseY =-((e.clientY-r.top) /r.height)*2+1;
-  sphereHover = true;
-});
+  const x = e.clientX ?? e.touches?.[0]?.clientX;
+  const y = e.clientY ?? e.touches?.[0]?.clientY;
+  if(x!=null && y!=null){
+    sMouseX = ((x-r.left)/r.width )*2-1;
+    sMouseY =-((y-r.top) /r.height)*2+1;
+    sphereHover = true;
+  }
+}
+sCanvas.addEventListener('mousemove', updateMouseFromEvent);
 sCanvas.addEventListener('mouseleave', ()=>{ sphereHover=false; });
+sCanvas.addEventListener('touchmove', updateMouseFromEvent, {passive:true});
+sCanvas.addEventListener('touchend', ()=>{ sphereHover=false; });
+sCanvas.addEventListener('touchcancel', ()=>{ sphereHover=false; });
 
 function trySphereClick(){
   if(zoomPhase !== 'idle') return;
