@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <meta name="theme-color" content="#060606"/>
 <title>Aetheric Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html{height:100%}
-body{width:100%;height:100%;min-height:100vh;min-height:-webkit-fill-available;background:#060606;overflow:hidden;cursor:none;-webkit-tap-highlight-color:transparent}
+html{height:100%;overflow:hidden;scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar{display:none}
+body{width:100%;height:100%;min-height:100vh;min-height:-webkit-fill-available;background:#060606;overflow:hidden;overscroll-behavior:none;cursor:none;-webkit-tap-highlight-color:transparent}
 
 /* noise grain */
 .noise{position:fixed;inset:0;pointer-events:none;z-index:999;opacity:.04;
@@ -114,6 +115,9 @@ document.querySelectorAll('button,a').forEach(el=>{
   el.addEventListener('mouseenter',()=>{cursorRing.style.width='56px';cursorRing.style.height='56px';cursorRing.style.borderColor='rgba(77,232,194,.45)';cursorRing.style.background='rgba(77,232,194,.04)'});
   el.addEventListener('mouseleave',()=>{cursorRing.style.width='36px';cursorRing.style.height='36px';cursorRing.style.borderColor='rgba(255,255,255,.22)';cursorRing.style.background='transparent'});
 });
+document.addEventListener('gesturestart',e=>e.preventDefault());
+document.addEventListener('gesturechange',e=>e.preventDefault());
+document.addEventListener('gestureend',e=>e.preventDefault());
 
 // ─── ENTER OVERLAY ────────────────────────────────────────────────────────────
 let audioStarted = false;
@@ -134,9 +138,15 @@ const renderer = new THREE.WebGLRenderer({canvas:sCanvas, antialias:true, alpha:
 renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio,1.5) : Math.min(window.devicePixelRatio,2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
+// ── Mobile: camera further back so sphere fits; narrow portrait: extra margin ───
+const aspect = window.innerWidth / window.innerHeight;
+const narrowPortrait = isMobile && aspect < 0.7;
+const CAM_Z_START = narrowPortrait ? 4.2 : (isMobile ? 3.85 : 3.4);
+const CAM_Z_END = narrowPortrait ? 1.15 : (isMobile ? 1.02 : 0.82);
+
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.z = 3.4;
+camera.position.z = CAM_Z_START;
 
 // ── Fibonacci dots ────────────────────────────────────────────────────────────
 const N_DOTS = isMobile ? 1400 : 2800;
@@ -179,10 +189,8 @@ const mouse2D = new THREE.Vector2();
 let sMouseX=0, sMouseY=0, sphereHover=false;
 
 // Camera zoom + overlay reveal state
-let zoomPhase = 'idle';  // idle | zooming
+let zoomPhase = 'idle';
 let zoomStartTime = 0;
-const CAM_Z_START = 3.4;
-const CAM_Z_END = 0.82;
 const ZOOM_DUR = 1.1;
 
 function updateMouseFromEvent(e){
@@ -214,7 +222,9 @@ function trySphereClick(){
 }
 
 function resetCameraZoom(){
-  camera.position.z = CAM_Z_START;
+  const a = window.innerWidth / window.innerHeight;
+  const np = isMobile && a < 0.7;
+  camera.position.z = np ? 4.2 : (isMobile ? 3.85 : 3.4);
 }
 sCanvas.addEventListener('click', trySphereClick);
 sCanvas.addEventListener('touchstart', e=>{
@@ -283,6 +293,7 @@ window.addEventListener('resize',()=>{
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
+  if(zoomPhase === 'idle') camera.position.z = (isMobile && camera.aspect < 0.7) ? 4.2 : (isMobile ? 3.85 : 3.4);
 });
 
 // ─── SOUND ENGINE ─────────────────────────────────────────────────────────────
@@ -323,6 +334,17 @@ function startAudio(){
   noiseLayer.volume.value = -34;
   noiseLayer.start();
 
+  // ── 2b. ALIEN RESONANCE — theremin-like floating overtone ──────────────
+  const alienRev = new Tone.Reverb({decay:14, wet:.9}).connect(masterEQ);
+  const alienLFO = new Tone.LFO({frequency:.07, min:180, max:420}).start();
+  const alienSynth = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:8, decay:0, sustain:1, release:12},
+    volume:-28
+  }).connect(alienRev);
+  alienLFO.connect(alienSynth.frequency);
+  alienSynth.triggerAttack(277, now);
+
   // ── 3. SINGING BOWL — warm metallic bell, cursor glide ────────────────
   const bowlRev = new Tone.Reverb({decay:8, wet:.82}).connect(masterEQ);
   const bowlChorus = new Tone.Chorus({frequency:1.2, delayTime:3.5, depth:.5}).start().connect(bowlRev);
@@ -336,18 +358,19 @@ function startAudio(){
     volume:-14
   }).connect(bowlChorus);
 
-  // ── 4. CRYSTAL PINGS — glassy bell chimes ─────────────────────────────
+  // ── 4. CRYSTAL PINGS — glassy alien chimes ────────────────────────────
   const pingRev = new Tone.Reverb({decay:6, wet:.78}).connect(masterEQ);
-  const pingDelay = new Tone.FeedbackDelay({delayTime:'8n', feedback:.28, wet:.22}).connect(pingRev);
+  const pingDelay = new Tone.FeedbackDelay({delayTime:'8n', feedback:.3, wet:.24}).connect(pingRev);
+  const pingVib = new Tone.Vibrato({frequency:5.2, depth:.012}).start().connect(pingDelay);
   cosmoPings = new Tone.PolySynth(Tone.FMSynth, {
-    harmonicity:5.2,
-    modulationIndex:2.4,
+    harmonicity:5.8,
+    modulationIndex:2.6,
     oscillator:{type:'sine'},
-    modulation:{type:'triangle'},
-    modulationEnvelope:{attack:.001,decay:.22,sustain:0,release:.35},
-    envelope:{attack:.001,decay:.18,sustain:0,release:.65},
-    volume:-20
-  }).connect(pingDelay);
+    modulation:{type:'sine'},
+    modulationEnvelope:{attack:.001,decay:.2,sustain:0,release:.3},
+    envelope:{attack:.001,decay:.16,sustain:0,release:.6},
+    volume:-19
+  }).connect(pingVib);
 
   // ── 5. ACTIVATION SWEEP — cinematic rise ─────────────────────────────
   const sweepRev = new Tone.Reverb({decay:8, wet:.85}).connect(masterEQ);
@@ -374,48 +397,52 @@ function playExplodeSound(){
   if(!soundOn || typeof Tone==='undefined') return;
   const dest = masterEQ || Tone.getDestination();
   const now = Tone.now();
-  const rev = new Tone.Reverb({decay:3, wet:.85}).connect(dest);
-  const noise = new Tone.Noise('brown').connect(rev);
-  noise.volume.value = -12;
-  noise.start(now);
-  noise.stop(now + .4);
-  const filter = new Tone.Filter({type:'lowpass', frequency:550}).connect(rev);
-  const sweep = new Tone.FMSynth({
-    harmonicity:2.5, modulationIndex:1.5,
-    envelope:{attack:.001, decay:.35, sustain:0, release:.5},
-    volume:-8
-  }).connect(filter);
-  sweep.frequency.setValueAtTime(220, now);
-  sweep.frequency.exponentialRampToValueAtTime(45, now + .45);
-  sweep.triggerAttackRelease(220, .5, now);
+  const rev = new Tone.Reverb({decay:4, wet:.88}).connect(dest);
+  const chorus = new Tone.Chorus({frequency:2.8, delayTime:6, depth:.4}).start().connect(rev);
+  const fm = new Tone.FMSynth({
+    harmonicity:7.3, modulationIndex:3.2,
+    oscillator:{type:'sine'},
+    modulation:{type:'sine'},
+    envelope:{attack:.02, decay:.5, sustain:0, release:1.2},
+    volume:-6
+  }).connect(chorus);
+  fm.frequency.setValueAtTime(164.8, now);
+  fm.frequency.exponentialRampToValueAtTime(32.7, now + .5);
+  fm.triggerAttackRelease(164.8, .55, now);
+  const ping = new Tone.FMSynth({
+    harmonicity:8, modulationIndex:2.5,
+    envelope:{attack:.001, decay:.08, sustain:0, release:.4},
+    volume:-14
+  }).connect(rev);
+  [0, .12, .24].forEach(d=> ping.triggerAttackRelease(392*(1-d*.15), '16n', now+d));
 }
 
 function playReassembleSound(){
   if(!soundOn || typeof Tone==='undefined') return;
   const dest = masterEQ || Tone.getDestination();
   const now = Tone.now();
-  const rev = new Tone.Reverb({decay:5, wet:.82}).connect(dest);
+  const rev = new Tone.Reverb({decay:5.5, wet:.84}).connect(dest);
   const fm = new Tone.FMSynth({
-    harmonicity:4.2, modulationIndex:2.2,
+    harmonicity:4.5, modulationIndex:2.4,
     oscillator:{type:'sine'},
     modulation:{type:'sine'},
-    envelope:{attack:.25, decay:0, sustain:1, release:1.8},
-    volume:-12
+    envelope:{attack:.22, decay:0, sustain:1, release:1.7},
+    volume:-11
   }).connect(rev);
   fm.frequency.setValueAtTime(130.8, now);
   fm.frequency.exponentialRampToValueAtTime(523.25, now + 1);
   fm.triggerAttack(130.8, now);
   fm.triggerRelease(now + 1.15);
-  [.2, .45, .7, .95].forEach((delay,i)=>{
+  [.2, .42, .65, .9].forEach((delay,i)=>{
     const ping = new Tone.FMSynth({
-      harmonicity:5.5, modulationIndex:2.2,
+      harmonicity:6.2, modulationIndex:2.4,
       oscillator:{type:'sine'},
       modulation:{type:'triangle'},
-      envelope:{attack:.001, decay:.2, sustain:0, release:.55},
-      volume:-16
+      envelope:{attack:.001, decay:.18, sustain:0, release:.5},
+      volume:-15
     }).connect(rev);
     const chord = [261.6, 329.6, 392, 523.25];
-    ping.triggerAttackRelease(chord[i], '8n', now + delay * .95);
+    ping.triggerAttackRelease(chord[i], '8n', now + delay * .92);
   });
 }
 
