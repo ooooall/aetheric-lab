@@ -7,14 +7,15 @@ import * as THREE from 'three';
 
 const SPHERE_DOTS_DESKTOP = 4200;
 const SPHERE_DOTS_MOBILE = 1800;
-const SPHERE_RADIUS = 0.52;
+const SPHERE_RADIUS = 0.42;
+const CAMERA_DISTANCE = 2.05;
 const BASE_ROTATION_Y = 0.0045;
 const HOVER_ROTATION_Y = 0.012;
 const TILT_LERP = 0.028;
 const MAX_TILT = 0.22;
-const LIGHT_RADIUS = 0.18;
-const DOT_BRIGHT_THRESHOLD = 0.11;
-const PIXEL_SIZE = 2.4;
+const LIGHT_RADIUS = 0.15;
+const DOT_BRIGHT_THRESHOLD = 0.1;
+const PIXEL_SIZE = 1.55;
 
 function fibonacciSphere(samples, radius) {
   const points = [];
@@ -41,8 +42,8 @@ export function createDotSphereScene(container, options = {}) {
   const tempWorld = new THREE.Vector3();
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(48, width / height, 0.01, 10);
-  camera.position.z = 1.75;
+  const camera = new THREE.PerspectiveCamera(52, width / height, 0.01, 10);
+  camera.position.z = CAMERA_DISTANCE;
   camera.lookAt(0, 0, 0);
 
   const positions = fibonacciSphere(dotCount, SPHERE_RADIUS);
@@ -67,8 +68,9 @@ export function createDotSphereScene(container, options = {}) {
 
   const material = new THREE.ShaderMaterial({
     transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    depthWrite: true,
+    depthTest: true,
+    blending: THREE.NormalBlending,
     uniforms: {
       uMouse: { value: new THREE.Vector3(0, 0, 0) },
       uTime: { value: 0 },
@@ -84,17 +86,16 @@ export function createDotSphereScene(container, options = {}) {
       uniform float uHover;
       uniform float uLightRadius;
       varying float vBrightness;
-      varying float vPulse;
       void main() {
         vec3 pos = position;
-        float pulse = 1.0 + 0.12 * sin(uTime * 1.8) * uHover;
+        float pulse = 1.0 + 0.1 * sin(uTime * 1.8) * uHover;
         pos *= pulse;
         vec4 worldPos = modelMatrix * vec4(pos, 1.0);
         float dist = length(worldPos.xyz - uMouse);
         vBrightness = 1.0 / (1.0 + (dist / uLightRadius) * (dist / uLightRadius));
-        vPulse = pulse;
         vec4 mvPos = viewMatrix * worldPos;
-        gl_PointSize = size * ${PIXEL_SIZE.toFixed(2)} * (320.0 / -mvPos.z);
+        float depth = -mvPos.z;
+        gl_PointSize = size * ${PIXEL_SIZE.toFixed(2)} * (280.0 / depth);
         gl_Position = projectionMatrix * mvPos;
       }
     `,
@@ -102,13 +103,12 @@ export function createDotSphereScene(container, options = {}) {
       uniform vec3 uBaseColor;
       uniform vec3 uAccentColor;
       varying float vBrightness;
-      varying float vPulse;
       void main() {
         vec2 c = gl_PointCoord - 0.5;
         float d = length(c) * 2.0;
-        float edge = smoothstep(0.75, 0.4, d);
-        float alpha = edge * mix(0.12, 1.0, vBrightness);
-        vec3 col = mix(uBaseColor * 0.12, uAccentColor, vBrightness * 1.05);
+        float edge = smoothstep(0.9, 0.35, d);
+        float alpha = edge * mix(0.2, 0.95, vBrightness);
+        vec3 col = mix(uBaseColor * 0.25, uAccentColor, vBrightness);
         gl_FragColor = vec4(col, alpha);
       }
     `,

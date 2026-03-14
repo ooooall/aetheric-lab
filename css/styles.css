@@ -238,10 +238,9 @@ body.using-touch .cursor {
   50% { opacity: 1; transform: rotate(45deg) translateY(6px); }
 }
 
-/* ━━━ Sphere section: сфера по центру, без фона ━━━ */
+/* ━━━ Sphere section: сфера в своей зоне, текст не перекрывается ━━━ */
 .sphere-section {
   flex-direction: column;
-  justify-content: flex-end;
   padding: 0;
   background: var(--bg);
   min-height: 100vh;
@@ -249,26 +248,23 @@ body.using-touch .cursor {
 }
 
 .sphere-canvas-wrap {
-  position: absolute;
-  inset: 0;
+  flex: 0 0 auto;
   width: 100%;
-  height: 100%;
+  height: 62vh;
+  min-height: 280px;
+  max-height: 520px;
   z-index: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .sphere-content {
-  position: relative;
-  z-index: 1;
+  flex: 1 1 auto;
   width: 100%;
   max-width: 90vw;
-  padding: 2rem 1.5rem 3rem;
+  padding: 2.5rem 1.5rem 3.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: auto;
+  z-index: 1;
 }
 
 .manifesto {
@@ -293,11 +289,13 @@ body.using-touch .cursor {
 }
 
 @media (max-width: 768px) {
-  .sphere-section {
-    padding: 0;
+  .sphere-canvas-wrap {
+    height: 50vh;
+    min-height: 260px;
+    max-height: 400px;
   }
   .sphere-content {
-    padding: 1.5rem 1rem 2.5rem;
+    padding: 2rem 1rem 3rem;
   }
 }
 
