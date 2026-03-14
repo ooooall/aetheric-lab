@@ -1,27 +1,30 @@
 /**
- * Effect #2 — Interactive dot sphere
- * Fibonacci sphere, cursor light wave, hover pulse
+ * Effect #2 — Сфера из тысяч пикселей
+ * Fibonacci sphere, волна света от курсора, наклон к курсору, пульс при наведении
  */
 
 import * as THREE from 'three';
 
-const SPHERE_DOTS_DESKTOP = 800;
-const SPHERE_DOTS_MOBILE = 400;
-const SPHERE_RADIUS = 0.5;
-const BASE_ROTATION_Y = 0.003;
-const HOVER_ROTATION_Y = 0.008;
-const LIGHT_FALLOFF = 0.1;
-const DOT_BRIGHT_THRESHOLD = 0.12;
+const SPHERE_DOTS_DESKTOP = 4200;
+const SPHERE_DOTS_MOBILE = 1800;
+const SPHERE_RADIUS = 0.52;
+const BASE_ROTATION_Y = 0.0022;
+const HOVER_ROTATION_Y = 0.007;
+const TILT_LERP = 0.028;
+const MAX_TILT = 0.22;
+const LIGHT_RADIUS = 0.18;
+const DOT_BRIGHT_THRESHOLD = 0.11;
+const PIXEL_SIZE = 2.4;
 
 function fibonacciSphere(samples, radius) {
   const points = [];
   const phi = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < samples; i++) {
-    const y = 1 - (i / (samples - 1)) * 2;
-    const radiusAtY = Math.sqrt(1 - y * y);
+    const y = 1 - (i / Math.max(1, samples - 1)) * 2;
+    const rY = Math.sqrt(1 - y * y);
     const theta = phi * i;
-    const x = Math.cos(theta) * radiusAtY * radius;
-    const z = Math.sin(theta) * radiusAtY * radius;
+    const x = Math.cos(theta) * rY * radius;
+    const z = Math.sin(theta) * rY * radius;
     points.push(x, y * radius, z);
   }
   return points;
@@ -38,22 +41,29 @@ export function createDotSphereScene(container, options = {}) {
   const tempWorld = new THREE.Vector3();
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 10);
-  camera.position.z = 1.8;
+  const camera = new THREE.PerspectiveCamera(48, width / height, 0.01, 10);
+  camera.position.z = 1.75;
   camera.lookAt(0, 0, 0);
 
   const positions = fibonacciSphere(dotCount, SPHERE_RADIUS);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
 
+  const sizes = new Float32Array(dotCount);
+  for (let i = 0; i < dotCount; i++) {
+    sizes[i] = 0.92 + Math.random() * 0.16;
+  }
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
   const sphereCenter = new THREE.Vector3(0, 0, 0);
   const sphereRadius = SPHERE_RADIUS;
-  const mouse3D = new THREE.Vector3(0, 0, 0);
-  const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2(-10, -10);
+  const raycaster = new THREE.Raycaster();
   const hoverPoint = new THREE.Vector3(0, 0, 0);
   let isHovering = false;
   let hoverTime = 0;
+  let tiltX = 0, tiltY = 0;
+  let targetTiltX = 0, targetTiltY = 0;
 
   const material = new THREE.ShaderMaterial({
     transparent: true,
@@ -65,33 +75,40 @@ export function createDotSphereScene(container, options = {}) {
       uHover: { value: 0 },
       uBaseColor: { value: new THREE.Color(1, 1, 1) },
       uAccentColor: { value: new THREE.Color(0x5fffd4) },
+      uLightRadius: { value: LIGHT_RADIUS },
     },
     vertexShader: `
+      attribute float size;
       uniform vec3 uMouse;
       uniform float uTime;
       uniform float uHover;
+      uniform float uLightRadius;
       varying float vBrightness;
-      varying vec3 vWorldPosition;
+      varying float vPulse;
       void main() {
         vec3 pos = position;
-        float pulse = 1.0 + 0.15 * sin(uTime * 2.0) * uHover;
+        float pulse = 1.0 + 0.12 * sin(uTime * 1.8) * uHover;
         pos *= pulse;
-        vWorldPosition = (modelMatrix * vec4(pos, 1.0)).xyz;
-        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+        float dist = length(worldPos.xyz - uMouse);
+        vBrightness = 1.0 / (1.0 + (dist / uLightRadius) * (dist / uLightRadius));
+        vPulse = pulse;
+        vec4 mvPos = viewMatrix * worldPos;
+        gl_PointSize = size * ${PIXEL_SIZE.toFixed(2)} * (320.0 / -mvPos.z);
         gl_Position = projectionMatrix * mvPos;
-        float dist = length(vWorldPosition - uMouse);
-        vBrightness = 1.0 / (1.0 + dist * 8.0);
-        gl_PointSize = 4.0 * (300.0 / -mvPos.z);
       }
     `,
     fragmentShader: `
       uniform vec3 uBaseColor;
       uniform vec3 uAccentColor;
       varying float vBrightness;
+      varying float vPulse;
       void main() {
-        float d = length(gl_PointCoord - 0.5) * 2.0;
-        float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * mix(0.15, 1.0, vBrightness);
-        vec3 col = mix(uBaseColor * 0.15, uAccentColor, vBrightness);
+        vec2 c = gl_PointCoord - 0.5;
+        float d = length(c) * 2.0;
+        float edge = smoothstep(0.75, 0.4, d);
+        float alpha = edge * mix(0.12, 1.0, vBrightness);
+        vec3 col = mix(uBaseColor * 0.12, uAccentColor, vBrightness * 1.05);
         gl_FragColor = vec4(col, alpha);
       }
     `,
@@ -125,7 +142,12 @@ export function createDotSphereScene(container, options = {}) {
       if (t > 0) {
         hoverPoint.copy(raycaster.ray.origin).addScaledVector(dir, t);
         material.uniforms.uMouse.value.copy(hoverPoint);
+        targetTiltX = -mouse.y * MAX_TILT;
+        targetTiltY = mouse.x * MAX_TILT;
       }
+    } else {
+      targetTiltX *= 0.92;
+      targetTiltY *= 0.92;
     }
   }
 
@@ -134,9 +156,16 @@ export function createDotSphereScene(container, options = {}) {
     const dt = 0.016;
     hoverTime += dt;
     material.uniforms.uTime.value = hoverTime;
-    material.uniforms.uHover.value = isHovering ? Math.min(1, material.uniforms.uHover.value + dt * 2) : Math.max(0, material.uniforms.uHover.value - dt * 2);
-    const rotY = isHovering ? HOVER_ROTATION_Y : BASE_ROTATION_Y;
-    points.rotation.y += rotY;
+    material.uniforms.uHover.value = isHovering
+      ? Math.min(1, material.uniforms.uHover.value + dt * 2.2)
+      : Math.max(0, material.uniforms.uHover.value - dt * 1.5);
+
+    tiltX += (targetTiltX - tiltX) * TILT_LERP;
+    tiltY += (targetTiltY - tiltY) * TILT_LERP;
+    points.rotation.x = tiltX;
+    points.rotation.y += isHovering ? HOVER_ROTATION_Y : BASE_ROTATION_Y;
+    points.rotation.z = tiltY;
+
     points.updateMatrixWorld(true);
     const hoverPt = material.uniforms.uMouse.value;
     const posAttr = geometry.attributes.position;
@@ -177,6 +206,8 @@ export function createDotSphereScene(container, options = {}) {
   }
   function onMouseLeave() {
     isHovering = false;
+    targetTiltX = 0;
+    targetTiltY = 0;
     material.uniforms.uMouse.value.set(1e6, 1e6, 1e6);
     if (callbacks.onHoverLeave) callbacks.onHoverLeave();
   }
@@ -207,7 +238,6 @@ export function createDotSphereScene(container, options = {}) {
       projectMouseToSphere(clientX, clientY);
     },
     getMouseXNorm() {
-      const rect = container.getBoundingClientRect();
       return (mouse.x + 1) * 0.5;
     },
   };
